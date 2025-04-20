@@ -40,13 +40,21 @@ dummy_ros2_driver/
 1. Clone this repository to your ROS2 workspace `src/` folder.
 2. Clone Serial lib from https://github.com/ZhaoXiangBox/serial to the `src/` folder
 3. Run `colcon build` to compile.
-4. Launch the driver using `ros2 run dummy dummy_controller`
+4. Launch the driver using 
+```
+source install/setup.bash
+ros2 run dummy dummy_controller --ros-args --params-file ./src/dummy/config/config.yaml 
+```
 5. Publish messages to control the robot arm.
 ---
 1. 克隆本仓库至 ROS2 工作区的 `src/` 目录下。
 2. 克隆Serial仓库（https://github.com/ZhaoXiangBox/serial）到同一个`src/`目录
 3. 使用 `colcon build` 进行编译。
-4. 通过命令 `ros2 run dummy dummy_controller` 启动驱动。
+4. 通过以下命令启动驱动
+```
+source install/setup.bash
+ros2 run dummy dummy_controller --ros-args --params-file ./src/dummy/config/config.yaml 
+```
 5. 发布消息控制机械臂动作。
 
 
