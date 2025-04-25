@@ -43,17 +43,23 @@ dummy_ros2_driver/
 4. Launch the driver using 
 ```
 source install/setup.bash
-ros2 run dummy dummy_controller --ros-args --params-file ./src/dummy/config/config.yaml 
+# Only driver Dummy ARM
+ros2 run dummy dummy_controller --ros-args --params-file ./src/dummy/config/config.yaml
+# Simultaneously launch the dummy controller and USB camera
+ros2 launch dummy dummy_usbcamera.launch.py
 ```
 5. Publish messages to control the robot arm.
 ---
 1. 克隆本仓库至 ROS2 工作区的 `src/` 目录下。
-2. 克隆Serial仓库（https://github.com/ZhaoXiangBox/serial）到同一个`src/`目录
+2. 克隆Serial仓库 https://github.com/ZhaoXiangBox/serial  到同一个`src/`目录
 3. 使用 `colcon build` 进行编译。
 4. 通过以下命令启动驱动
 ```
 source install/setup.bash
+# 單獨控制dummy手臂
 ros2 run dummy dummy_controller --ros-args --params-file ./src/dummy/config/config.yaml 
+# 如果需要啟動USB相機節點
+ros2 launch dummy dummy_usbcamera.launch.py
 ```
 5. 发布消息控制机械臂动作。
 
