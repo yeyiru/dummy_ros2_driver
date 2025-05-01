@@ -8,6 +8,7 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_lifecycle REQUIRED)
 find_package(serial REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
@@ -29,7 +30,8 @@ add_executable(dummy_controller src/dummy_controller.cpp)
 add_executable(usb_cam_publisher src/usb_cam_publisher.cpp)
 
 ament_target_dependencies(dummy_controller 
-  rclcpp 
+  rclcpp
+  rclcpp_lifecycle
   serial 
   geometry_msgs
   std_msgs
@@ -41,7 +43,8 @@ ament_target_dependencies(dummy_controller
 )
 
 ament_target_dependencies(usb_cam_publisher 
-  rclcpp 
+  rclcpp
+  rclcpp_lifecycle
   serial 
   geometry_msgs
   std_msgs

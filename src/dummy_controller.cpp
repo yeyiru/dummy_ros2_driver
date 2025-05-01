@@ -1,7 +1,7 @@
 #include <common_lib.h>
 
 dummy_controller::dummy_controller()
-    : rclcpp::Node("dummy_controller"),
+    : LifecycleNode("dummy_controller"),
     tf_buffer_(this->get_clock()),
     tf_listener_(tf_buffer_) 
 {
@@ -10,38 +10,70 @@ dummy_controller::dummy_controller()
     timeout_ms = this->declare_parameter("timeout", 1000);
     RCLCPP_INFO(this->get_logger(), "Serial port: %s", serial_port.c_str());
     RCLCPP_INFO(this->get_logger(), "Baudrate: %d", baudrate);
-    init_dummy();
-    init_publisher_subscribe();
     RCLCPP_INFO(this->get_logger(), "Dummy Controller Initialized");
+    RCLCPP_INFO(this->get_logger(), "Lifecycle Dummy controller node created.");
 };
+
+// Lifecycle state machine:
+// [unconfigured] -- configure --> [inactive] -- activate --> [active]
+//        ^                                   |
+//        |                                   |
+//     cleanup <-------------------------- deactivate
+//        |
+//     shutdown (any state can go here)
+
+rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
+dummy_controller::on_configure(const rclcpp_lifecycle::State &) {
+    init_dummy();
+    return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
+}
+
+rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
+dummy_controller::on_activate(const rclcpp_lifecycle::State &) {
+    init_publisher_subscribe();
+    RCLCPP_INFO(this->get_logger(), "Dummy Controller Activated");
+    return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
+}
+
+rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
+dummy_controller::on_deactivate(const rclcpp_lifecycle::State &) {
+    stop_dummy();
+    home_dummy();
+    reset_publisher_subscribe();
+    RCLCPP_INFO(this->get_logger(), "Dummy Controller Deactivated");
+    return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
+}
+
+rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
+dummy_controller::on_cleanup(const rclcpp_lifecycle::State &) {
+    stop_dummy();
+    reset_dummy();
+    turn_off_dummy();
+    reset_publisher_subscribe();
+    close_serial();
+    RCLCPP_INFO(this->get_logger(), "Dummy Controller Cleaned, Serial port closed");
+    return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
+}
+
+rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
+dummy_controller::on_shutdown(const rclcpp_lifecycle::State &) {
+    // 关闭手臂
+    stop_dummy();
+    reset_dummy();
+    turn_off_dummy();
+    reset_publisher_subscribe();
+    close_serial();
+    RCLCPP_INFO(this->get_logger(), "Dummy Controller Shutdown");
+    return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
+}
 
 dummy_controller::~dummy_controller() {
     // 关闭手臂
-    if (serial_.isOpen()) {
-        // 停止手臂
-        serial_.flushInput();
-        serial_.write("!STOP\n");
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-        std::string data = serial_.readline();
-        // RCLCPP_INFO(this->get_logger(), "Received: %s", data.c_str());
-        if (data.find("Stopped ok") != std::string::npos) {
-            RCLCPP_INFO(this->get_logger(), "Dummy Stopped");
-        }
-
-        // 关闭手臂电机
-        serial_.flushInput();
-        serial_.write("!DISABLE\n");
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-        data = serial_.readline();
-        // RCLCPP_INFO(this->get_logger(), "Received: %s", data.c_str());
-        if (data.find("Disabled ok") != std::string::npos) {
-            RCLCPP_INFO(this->get_logger(), "Dummy Disabled");
-        }
-        serial_.close();
-        RCLCPP_INFO(this->get_logger(), "Serial port closed");
-    } else {
-        RCLCPP_WARN(this->get_logger(), "Serial port is not open");
-    }
+    stop_dummy();
+    reset_dummy();
+    turn_off_dummy();
+    reset_publisher_subscribe();
+    close_serial();
     RCLCPP_INFO(this->get_logger(), "Dummy controller destroyed");
 };
 
@@ -96,6 +128,18 @@ void dummy_controller::init_publisher_subscribe() {
         std::bind(&dummy_controller::poll_position, this));
 }
 
+void dummy_controller::reset_publisher_subscribe() {
+    delta_pose_sub_.reset();
+    
+    joint_sub_.reset();
+    
+    pose_pub_.reset();    
+    joint_pub_.reset();
+    
+    tf_broadcaster_.reset();
+    timer_.reset();
+}
+
 void dummy_controller::end_pos_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
     // 1. 提取位置
     double x = msg->pose.position.x;
@@ -128,12 +172,17 @@ void dummy_controller::end_pos_callback(const geometry_msgs::msg::PoseStamped::S
     std::string cmd_str = oss.str();
 
     // 5. 發送串口
+    pause_lpos = true;
     serial_.flushInput();
     serial_.write(cmd_str);  // 假設你已有 serial_.write() 方法
     RCLCPP_INFO(this->get_logger(), "Sent command: %s", cmd_str.c_str());
+    pause_lpos = false;
 }
 
 void dummy_controller::poll_position() {
+    if (pause_lpos){
+        return;
+    }
     if (serial_.isOpen()) {
         //读取并发布关节角度
         serial_.flushInput();
@@ -272,6 +321,75 @@ void dummy_controller::joints_callback(const trajectory_msgs::msg::JointTrajecto
     }
 }
 
+void dummy_controller::reset_dummy() {
+    pause_lpos = true;
+    // 回到收起位置
+    if (!serial_.isOpen()) {
+        RCLCPP_ERROR(this->get_logger(), "Serial port is not open");
+        return;
+    }
+    serial_.flushInput();
+    serial_.write("!RESET\n");
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::string data = serial_.readline();
+    RCLCPP_INFO(this->get_logger(), "Dummy Reset(%s)", data.c_str());
+    pause_lpos = false;
+}
+
+void dummy_controller::home_dummy() {
+    pause_lpos = true;
+    // 回到7字位置
+    if (!serial_.isOpen()) {
+        RCLCPP_ERROR(this->get_logger(), "Serial port is not open");
+        return;
+    }
+    serial_.flushInput();
+    serial_.write("!HOME\n");
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::string data = serial_.readline();
+    // RCLCPP_INFO(this->get_logger(), "Received: %s", data.c_str());
+    RCLCPP_INFO(this->get_logger(), "Dummy Homed(%s)", data.c_str());
+    pause_lpos = false;
+}
+
+void dummy_controller::stop_dummy() {
+    pause_lpos = true;
+    // 停止手臂
+    if (!serial_.isOpen()) {
+        RCLCPP_ERROR(this->get_logger(), "Serial port is not open");
+        return;
+    }
+    serial_.flushInput();
+    serial_.write("!STOP\n");
+    std::string data = serial_.readline();
+    // RCLCPP_INFO(this->get_logger(), "Received: %s", data.c_str());
+    RCLCPP_INFO(this->get_logger(), "Dummy Stopped(%s)", data.c_str());
+    pause_lpos = false;
+}
+
+void dummy_controller::turn_off_dummy() {
+    // 关闭手臂电机
+    if (!serial_.isOpen()) {
+        RCLCPP_ERROR(this->get_logger(), "Serial port is not open");
+        return;
+    }
+    serial_.flushInput();
+    serial_.write("!DISABLE\n");
+    std::string data = serial_.readline();
+    // RCLCPP_INFO(this->get_logger(), "Received: %s", data.c_str());
+    RCLCPP_INFO(this->get_logger(), "Dummy Disabled(%s)", data.c_str());
+}
+
+void dummy_controller::close_serial() {
+    // 关闭串口
+    if (serial_.isOpen()) {
+        serial_.close();
+        RCLCPP_INFO(this->get_logger(), "Serial port closed");
+    } else {
+        RCLCPP_WARN(this->get_logger(), "Serial port is not open");
+    }
+}
+
 std::string dummy_controller::read_response(const std::string &response_raw) {
     std::string response = response_raw;
     // 去除尾部的 \r 或 \n
@@ -289,16 +407,14 @@ std::string dummy_controller::read_response(const std::string &response_raw) {
         // RCLCPP_INFO(this->get_logger(), "Skip response (ack): '%s'", response.c_str());
         return "OUT";
     }
-
-
     return response;
 }
-
 
 int main(int argc, char * argv[])
 {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<dummy_controller>());
+  auto node = std::make_shared<dummy_controller>();
+  rclcpp::spin(node->get_node_base_interface());
   rclcpp::shutdown();
   return 0;
 }
