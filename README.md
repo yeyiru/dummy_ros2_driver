@@ -63,6 +63,14 @@ ros2 launch dummy dummy_usbcamera.launch.py
 ```
 5. 发布消息控制机械臂动作。
 
+## 生命週期節點狀態
+1. `ros2 launch dummy dummy_controller.launch.py` [Node started up] 啟動節點，讀取到config參數
+2. `ros2 lifecycle set /dummy_controller configure` [Configure status] 打開串口、電機使能、手臂進入7字狀態
+3. `ros2 lifecycle set /dummy_controller activate` [Activate status] 初始化發佈器訂閱器，開始讀取關節角度信息，開始接受外部控制指令
+4. `ros2 lifecycle set /dummy_controller deactivate` [Decativate status] 停止讀取關節角度，銷毀發佈器、接收器
+5. `ros2 lifecycle set /dummy_controller cleanup`[Inconfigure status] 手臂回到收回位置、電機關閉、關閉發佈器和接收器、關閉串口
+6. `ros2 lifecycle set /dummy_controller shutdown`[Shutdown status] 手臂回到收回位置、電機關閉、關閉發佈器和接收器、關閉串口
+
 
 ## Acknowledgements | 致谢
 [1] https://github.com/peng-zhihui/Dummy-Robot

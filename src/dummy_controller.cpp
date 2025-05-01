@@ -48,8 +48,8 @@ rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 dummy_controller::on_cleanup(const rclcpp_lifecycle::State &) {
     stop_dummy();
     reset_dummy();
-    turn_off_dummy();
     reset_publisher_subscribe();
+    turn_off_dummy();
     close_serial();
     RCLCPP_INFO(this->get_logger(), "Dummy Controller Cleaned, Serial port closed");
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
@@ -60,8 +60,8 @@ dummy_controller::on_shutdown(const rclcpp_lifecycle::State &) {
     // 关闭手臂
     stop_dummy();
     reset_dummy();
-    turn_off_dummy();
     reset_publisher_subscribe();
+    turn_off_dummy();
     close_serial();
     RCLCPP_INFO(this->get_logger(), "Dummy Controller Shutdown");
     return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
