@@ -8,6 +8,7 @@ dummy_controller::dummy_controller()
     serial_port = this->declare_parameter("port", "/dev/ttyUSB0");
     baudrate = this->declare_parameter("baudrate", 115200);
     timeout_ms = this->declare_parameter("timeout", 1000);
+    serial_timeout_sec = this->declare_parameter("serial_timeout_sec", 15);
     RCLCPP_INFO(this->get_logger(), "Serial port: %s", serial_port.c_str());
     RCLCPP_INFO(this->get_logger(), "Baudrate: %d", baudrate);
     RCLCPP_INFO(this->get_logger(), "Dummy Controller Initialized");
@@ -78,36 +79,10 @@ dummy_controller::~dummy_controller() {
 };
 
 void dummy_controller::init_dummy() {
-    try {
-        serial_.setPort(serial_port);
-        serial_.setBaudrate(baudrate);
-        serial::Timeout timeout = serial::Timeout::simpleTimeout(timeout_ms);
-        serial_.setTimeout(timeout);
-        serial_.open();
-        if (!serial_.isOpen()) {
-            RCLCPP_ERROR(this->get_logger(), "Failed to open serial port");
-            return;
-        }
-        RCLCPP_INFO(this->get_logger(), "Starting ...");
-        while (rclcpp::ok()) {
-            serial_.flushInput();
-            serial_.write("!START\n");
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-
-            std::string data = serial_.readline();
-            RCLCPP_INFO(this->get_logger(), "Received: %s", data.c_str());
-
-            if (data.find("Started ok") != std::string::npos) {
-                RCLCPP_INFO(this->get_logger(), "Dummy started");
-                serial_.flushInput();
-                serial_.write("!HOME\n");
-                break;
-            }
-        } 
-    } catch (const std::exception & e) {
-        RCLCPP_ERROR(this->get_logger(), "Error: %s", e.what());
-        return;
-    }
+    open_serial();
+    start_dummy();
+    home_dummy();
+    RCLCPP_INFO(this->get_logger(), "Dummy Controller Initialized");
 }
 
 void dummy_controller::init_publisher_subscribe() {
@@ -248,9 +223,9 @@ void dummy_controller::poll_position() {
         }
 
         try {
-            double x = std::stod(p_tokens[1]);
-            double y = std::stod(p_tokens[2]);
-            double z = std::stod(p_tokens[3]);
+            double x = std::stod(p_tokens[1]) / 1e3;
+            double y = std::stod(p_tokens[2]) / 1e3;
+            double z = std::stod(p_tokens[3]) / 1e3;
             double roll = std::stod(p_tokens[4]);
             double pitch = std::stod(p_tokens[5]);
             double yaw = std::stod(p_tokens[6]);
@@ -321,6 +296,40 @@ void dummy_controller::joints_callback(const trajectory_msgs::msg::JointTrajecto
     }
 }
 
+void dummy_controller::open_serial() {
+    // 打開串口
+    try {
+        serial_.setPort(serial_port);
+        serial_.setBaudrate(baudrate);
+        serial::Timeout timeout = serial::Timeout::simpleTimeout(timeout_ms);
+        serial_.setTimeout(timeout);
+        serial_.open();
+        if (!serial_.isOpen()) {
+            RCLCPP_ERROR(this->get_logger(), "Failed to open serial port");
+            return;
+        }
+    } catch (const std::exception & e) {
+        RCLCPP_ERROR(this->get_logger(), "Error: %s", e.what());
+        return;
+    }
+}
+
+void dummy_controller::start_dummy() {
+    // 打開手臂電機
+    if (!serial_.isOpen()) {
+        RCLCPP_ERROR(this->get_logger(), "Serial port is not open");
+        return;
+    }
+    serial_.flushInput();
+    serial_.write("!START\n");
+    std::string data;
+    auto start_time = std::chrono::steady_clock::now();
+    // 等待串口返回
+    waitting_for_manipulate(data, start_time);
+    RCLCPP_INFO(this->get_logger(), "Dummy Enabled(%s)", data.c_str());
+
+}
+
 void dummy_controller::reset_dummy() {
     pause_lpos = true;
     // 回到收起位置
@@ -330,8 +339,11 @@ void dummy_controller::reset_dummy() {
     }
     serial_.flushInput();
     serial_.write("!RESET\n");
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    std::string data = serial_.readline();
+    
+    std::string data;
+    auto start_time = std::chrono::steady_clock::now();
+    // 等待串口返回
+    waitting_for_manipulate(data, start_time);
     RCLCPP_INFO(this->get_logger(), "Dummy Reset(%s)", data.c_str());
     pause_lpos = false;
 }
@@ -345,9 +357,11 @@ void dummy_controller::home_dummy() {
     }
     serial_.flushInput();
     serial_.write("!HOME\n");
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    std::string data = serial_.readline();
-    // RCLCPP_INFO(this->get_logger(), "Received: %s", data.c_str());
+
+    std::string data;
+    auto start_time = std::chrono::steady_clock::now();
+    // 等待串口返回
+    waitting_for_manipulate(data, start_time);
     RCLCPP_INFO(this->get_logger(), "Dummy Homed(%s)", data.c_str());
     pause_lpos = false;
 }
@@ -361,8 +375,10 @@ void dummy_controller::stop_dummy() {
     }
     serial_.flushInput();
     serial_.write("!STOP\n");
-    std::string data = serial_.readline();
-    // RCLCPP_INFO(this->get_logger(), "Received: %s", data.c_str());
+    std::string data;
+    auto start_time = std::chrono::steady_clock::now();
+    // 等待串口返回
+    waitting_for_manipulate(data, start_time);
     RCLCPP_INFO(this->get_logger(), "Dummy Stopped(%s)", data.c_str());
     pause_lpos = false;
 }
@@ -375,7 +391,10 @@ void dummy_controller::turn_off_dummy() {
     }
     serial_.flushInput();
     serial_.write("!DISABLE\n");
-    std::string data = serial_.readline();
+    std::string data;
+    auto start_time = std::chrono::steady_clock::now();
+    // 等待串口返回
+    waitting_for_manipulate(data, start_time);
     // RCLCPP_INFO(this->get_logger(), "Received: %s", data.c_str());
     RCLCPP_INFO(this->get_logger(), "Dummy Disabled(%s)", data.c_str());
 }
@@ -388,6 +407,31 @@ void dummy_controller::close_serial() {
     } else {
         RCLCPP_WARN(this->get_logger(), "Serial port is not open");
     }
+}
+
+void dummy_controller::waitting_for_manipulate(std::string &data, const std::chrono::steady_clock::time_point &start_time) {
+    // 等待手臂执行特殊指令到位
+    while (true) {
+        if (serial_.available()) {
+            data = serial_.readline();
+            if (data.find("ok") != std::string::npos) {
+                RCLCPP_INFO(this->get_logger(), "Received OK: %s", data.c_str());
+                break;
+            }
+        }
+
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count();
+        if (elapsed > serial_timeout_sec) {
+            RCLCPP_WARN(this->get_logger(), "Timeout waiting for disable .");
+            break;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));  // 避免 CPU 忙等
+    }
+
+
+    
 }
 
 std::string dummy_controller::read_response(const std::string &response_raw) {

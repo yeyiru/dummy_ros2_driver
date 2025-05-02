@@ -40,11 +40,15 @@ public:
     void joints_callback(const trajectory_msgs::msg::JointTrajectory::SharedPtr msg);
     void end_pos_callback(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
 
+    void open_serial();
+    void start_dummy();
     void reset_dummy();
     void home_dummy();
     void stop_dummy();
     void turn_off_dummy();
     void close_serial();
+
+    void waitting_for_manipulate(std::string &data, const std::chrono::steady_clock::time_point &start_timestamp);
     // void control_end_position(const std::vector<double> & position);
 
     serial::Serial serial_;
@@ -61,6 +65,7 @@ public:
     std::string serial_port;
     int baudrate;
     int timeout_ms;
+    int serial_timeout_sec;
 
     bool pause_lpos = false;
 
