@@ -9,7 +9,8 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
-find_package(serial REQUIRED)
+# find_package(serial REQUIRED)
+find_package(serial_driver REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
@@ -32,7 +33,8 @@ add_executable(usb_cam_publisher src/usb_cam_publisher.cpp)
 ament_target_dependencies(dummy_controller 
   rclcpp
   rclcpp_lifecycle
-  serial 
+  # serial
+  serial_driver
   geometry_msgs
   std_msgs
   trajectory_msgs
@@ -45,7 +47,8 @@ ament_target_dependencies(dummy_controller
 ament_target_dependencies(usb_cam_publisher 
   rclcpp
   rclcpp_lifecycle
-  serial 
+  # serial
+  serial_driver 
   geometry_msgs
   std_msgs
   trajectory_msgs
