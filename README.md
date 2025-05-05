@@ -30,17 +30,18 @@ dummy_ros2_driver/
 ## Requirements | 运行依赖
 - ROS2 Humble
 - Python 3.8+
+- ROS2 serial_driver (You can isntall it by `sudo apt-get install ros-humble-serial-driver`)
 - Hardware: Dummy arm with serial interface
 ---
 - ROS2 Humble 或更新版本
 - Python 3.8 及以上版本
+- ROS2 serial_driver (可以通过 `sudo apt-get install ros-humble-serial-driver` 安装)
 - 硬件：具备串口接口的 Dummy 机械臂
 
 ## Usage | 使用方法
 1. Clone this repository to your ROS2 workspace `src/` folder.
-2. Clone Serial lib from https://github.com/ZhaoXiangBox/serial to the `src/` folder
-3. Run `colcon build` to compile.
-4. Launch the driver using 
+2. Run `colcon build` to compile.
+3. Launch the driver using 
 ```
 source install/setup.bash
 # Only driver Dummy ARM
@@ -51,13 +52,14 @@ ros2 launch dummy dummy_usbcamera.launch.py
 5. Publish messages to control the robot arm.
 ---
 1. 克隆本仓库至 ROS2 工作区的 `src/` 目录下。
-2. 克隆Serial仓库 https://github.com/ZhaoXiangBox/serial  到同一个`src/`目录
-3. 使用 `colcon build` 进行编译。
-4. 通过以下命令启动驱动
+2. 使用 `colcon build` 进行编译。
+3. 通过以下命令启动驱动
 ```
 source install/setup.bash
 # 單獨控制dummy手臂
 ros2 run dummy dummy_controller --ros-args --params-file ./src/dummy/config/config.yaml 
+# or
+ros2 launch dummy dummy_controller.launch.py
 # 如果需要啟動USB相機節點
 ros2 launch dummy dummy_usbcamera.launch.py
 ```
@@ -74,5 +76,4 @@ ros2 launch dummy dummy_usbcamera.launch.py
 
 ## Acknowledgements | 致谢
 [1] https://github.com/peng-zhihui/Dummy-Robot
-
 [2] https://gitee.com/switchpi/dummy

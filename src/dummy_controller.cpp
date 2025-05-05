@@ -100,7 +100,7 @@ void dummy_controller::init_publisher_subscribe() {
     
     tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
     timer_ = this->create_wall_timer(
-        std::chrono::milliseconds(500),
+        std::chrono::milliseconds(25),
         std::bind(&dummy_controller::call_poll_position, this));
 }
 
@@ -153,7 +153,7 @@ void dummy_controller::end_pos_callback(const geometry_msgs::msg::PoseStamped::S
 
     std::string cmd_body = oss.str();
     send_serial_command(cmd_body);
-    RCLCPP_INFO(this->get_logger(), "Sent command: %s", cmd_body.c_str());
+    // RCLCPP_INFO(this->get_logger(), "Sent command: %s", cmd_body.c_str());
     pause_lpos = false;
 }
 
@@ -165,10 +165,11 @@ void dummy_controller::call_poll_position() {
         RCLCPP_ERROR(this->get_logger(), "Serial port is not open");
         return;
     }
+
     //读取并发布关节角度
     send_serial_command("#GETJPOS");
 
-    //读取并发布关节角度
+    //读取并发布末端位置
     send_serial_command("#GETLPOS");
 }
 
@@ -181,7 +182,7 @@ void dummy_controller::async_receive_message() {
     port->async_receive([this](const std::vector<uint8_t>& data, const size_t& size) {
         if (size > 0) {
             std::string msg(data.begin(), data.begin() + size);
-            RCLCPP_INFO(this->get_logger(), "Received: %s", msg.c_str());
+            // RCLCPP_INFO(this->get_logger(), "Received: %s", msg.c_str());
             handle_received_message(msg);
         }
     
@@ -192,34 +193,23 @@ void dummy_controller::async_receive_message() {
 }
 
 void dummy_controller::handle_received_message(const std::string & msg) {
-    size_t id_pos = msg.find("ID=");
-    if (id_pos == std::string::npos || id_pos + 16 > msg.size()) {
-        RCLCPP_WARN(this->get_logger(), "No valid ID found.");
-        return;
-    }
-
-    std::string matched_id = msg.substr(id_pos, 16);  // ID=xxxxxxxxxxxxx
-
-    // 拿到命令發送時間（從 ID 字串中提取時間戳）
-    std::string timestamp_str = matched_id.substr(3);  // 去掉 "ID="
-    int64_t sent_time = std::stoll(timestamp_str);
-
     // 拿掉 ID=xxx 後的訊息主體
-    std::string body = msg.substr(0, id_pos);
-
-    if (body.size() > 5 && body.rfind("ok ") == body.size() - 3) {
-        pending_commands_[matched_id] = body;
-        RCLCPP_INFO(this->get_logger(), "[%s] Status: %s", matched_id.c_str(), body.c_str());
+    std::string body = msg;
+    if (body.size() > 5 && body.rfind("ok") == body.size() - 2) {
+        pause_cmd = false;
+        RCLCPP_INFO(this->get_logger(), "Status: %s", body.c_str());
     } else if (body.find("ok JPOS") != std::string::npos) {
+        RCLCPP_INFO(this->get_logger(), "Get JPOS %s", body.c_str());
         std::vector<float> jpos = extract_floats(body);
         if (jpos.size() == 6)
-            handle_joint_position(jpos, sent_time);
+            handle_joint_position(jpos);
         else
             RCLCPP_WARN(this->get_logger(), "Invalid JPOS value count");
     } else if (body.find("ok LPOS") != std::string::npos) {
+        RCLCPP_INFO(this->get_logger(), "Get LPOS %s", body.c_str());
         std::vector<float> lpos = extract_floats(body);
         if (lpos.size() == 6)
-            handle_linear_position(lpos, sent_time);
+            handle_linear_position(lpos);
         else
             RCLCPP_WARN(this->get_logger(), "Invalid LPOS value count");
     } else {
@@ -244,10 +234,11 @@ std::vector<float> dummy_controller::extract_floats(const std::string& str) {
     return result;
 }
 
-void dummy_controller::handle_joint_position(const std::vector<float>& jpos, const int64_t& millis) {
+void dummy_controller::handle_joint_position(const std::vector<float>& jpos) {
     try {
         sensor_msgs::msg::JointState joint_state;
-        rclcpp::Time stamp(static_cast<uint64_t>(millis) * 1000000ULL);  // 毫秒 → 奈秒
+        // rclcpp::Time stamp(static_cast<uint64_t>(millis)/1000);  // 毫秒 → 奈秒
+        rclcpp::Time stamp = this->now();
         joint_state.header.stamp = stamp;
         joint_state.name = joint_names_;
         for (size_t i = 0; i < jpos.size(); ++i) {
@@ -255,7 +246,7 @@ void dummy_controller::handle_joint_position(const std::vector<float>& jpos, con
         }
         joint_pub_->publish(joint_state);
 
-        RCLCPP_INFO(this->get_logger(), "Publish joint angles: j1: %f, j2: %f, j3: %f, j4: %f, j5: %f, j6: %f",
+        RCLCPP_INFO(this->get_logger(), "Publish JPOS: j1: %f, j2: %f, j3: %f, j4: %f, j5: %f, j6: %f",
             joint_state.position[0], joint_state.position[1], joint_state.position[2],
             joint_state.position[3], joint_state.position[4], joint_state.position[5]);
     }catch (const std::exception &e) {
@@ -263,7 +254,7 @@ void dummy_controller::handle_joint_position(const std::vector<float>& jpos, con
     }
 }
 
-void dummy_controller::handle_linear_position(const std::vector<float>& lpos, const int64_t& millis) {
+void dummy_controller::handle_linear_position(const std::vector<float>& lpos) {
     try {
         double x = lpos[0] / 1e3;
         double y = lpos[1] / 1e3;
@@ -272,7 +263,7 @@ void dummy_controller::handle_linear_position(const std::vector<float>& lpos, co
         double pitch = lpos[4];
         double yaw = lpos[5];
 
-        RCLCPP_INFO(this->get_logger(), "Publish pose: x: %f, y: %f, z: %f, roll: %f, pitch: %f, yaw: %f", x, y, z, roll, pitch, yaw);
+        RCLCPP_INFO(this->get_logger(), "Publish LPOS: x: %f, y: %f, z: %f, roll: %f, pitch: %f, yaw: %f", x, y, z, roll, pitch, yaw);
         // Convert roll, pitch, yaw to quaternion
         double rolld = roll * M_PI / 180.0;
         double pitchd = pitch * M_PI / 180.0;
@@ -281,7 +272,7 @@ void dummy_controller::handle_linear_position(const std::vector<float>& lpos, co
         q.setRPY(rolld, pitchd, yawd);
 
         geometry_msgs::msg::PoseStamped j6_pose;
-        rclcpp::Time stamp(static_cast<uint64_t>(millis) * 1000000ULL);  // 毫秒 → 奈秒
+        rclcpp::Time stamp = this->now();
         j6_pose.header.stamp = stamp;
         j6_pose.header.frame_id = "base_link";
         j6_pose.pose.position.x = x;
@@ -360,6 +351,25 @@ void dummy_controller::handle_linear_position(const std::vector<float>& lpos, co
         // 发布
         tf_broadcaster_->sendTransform(tool0_tf_msg);
 
+        geometry_msgs::msg::TransformStamped camera_tf_msg;
+        camera_tf_msg.header.stamp = stamp;
+        camera_tf_msg.header.frame_id = "joint6";         // 父坐标系
+        camera_tf_msg.child_frame_id = "camera_frame";           // 子坐标系
+
+        // 平移：沿 Z 正方向 2.5cm
+        camera_tf_msg.transform.translation.x = -0.04;
+        camera_tf_msg.transform.translation.y = 0.02;
+        camera_tf_msg.transform.translation.z = 0.025;
+
+        // 旋转：无旋转
+        camera_tf_msg.transform.rotation.x = 0.0;
+        camera_tf_msg.transform.rotation.y = 0.0;
+        camera_tf_msg.transform.rotation.z = 0.0;
+        camera_tf_msg.transform.rotation.w = 1.0;
+
+        // 发布
+        tf_broadcaster_->sendTransform(camera_tf_msg);
+
     } catch (const std::exception &e) {
         RCLCPP_ERROR(this->get_logger(), "Parse pose error: %s", e.what());
     }
@@ -372,20 +382,19 @@ void dummy_controller::joints_callback(const trajectory_msgs::msg::JointTrajecto
     }
 
     const auto &positions = msg->points[0].positions;
-
+    
     if (positions.size() < 6) {
         RCLCPP_WARN(this->get_logger(), "Expected 6 joint values, got %ld", positions.size());
         return;
     }
     //读取并发布关节角度
-    std::string id = generate_id();
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(3);
     oss << "&" << positions[0] << "," << positions[1] << "," << positions[2] << ","
         << positions[3] << "," << positions[4] << "," << positions[5];
     std::string cmd_body = oss.str();
     send_serial_command(cmd_body);
-    RCLCPP_INFO(this->get_logger(), "Sent command: %s", cmd_body.c_str());
+    // RCLCPP_INFO(this->get_logger(), "Sent command: %s", cmd_body.c_str());
 }
 
 void dummy_controller::open_serial() {
@@ -419,14 +428,7 @@ void dummy_controller::start_dummy() {
         RCLCPP_ERROR(this->get_logger(), "Serial port is not open");
         return;
     }
-    std::string id = send_serial_command("!START");
-    auto start_time = std::chrono::steady_clock::now();
-    // 等待串口返回
-    if (waitting_for_manipulate(id, start_time)){
-        RCLCPP_INFO(this->get_logger(), "Dummy Stopped Success.");
-    } else {
-        RCLCPP_WARN(this->get_logger(), "Dummy Stopped Timeout");
-    }
+    send_highlevel_serial_command("!START");
 }
 
 void dummy_controller::reset_dummy() {
@@ -436,14 +438,7 @@ void dummy_controller::reset_dummy() {
         RCLCPP_ERROR(this->get_logger(), "Serial port is not open");
         return;
     }
-    std::string id = send_serial_command("!RESET");
-    auto start_time = std::chrono::steady_clock::now();
-    // 等待串口返回
-    if (waitting_for_manipulate(id, start_time)){
-        RCLCPP_INFO(this->get_logger(), "Dummy Reset Success.");
-    } else {
-        RCLCPP_WARN(this->get_logger(), "Dummy Reset Timeout");
-    }
+    send_highlevel_serial_command("!RESET");
     pause_lpos = false;
 }
 
@@ -454,14 +449,7 @@ void dummy_controller::home_dummy() {
         RCLCPP_ERROR(this->get_logger(), "Serial port is not open");
         return;
     }
-    std::string id = send_serial_command("!HOME");
-    auto start_time = std::chrono::steady_clock::now();
-    // 等待串口返回
-    if (waitting_for_manipulate(id, start_time)){
-        RCLCPP_INFO(this->get_logger(), "Dummy Homed Success.");
-    } else {
-        RCLCPP_WARN(this->get_logger(), "Dummy Homed Timeout");
-    }
+    send_highlevel_serial_command("!HOME");
     pause_lpos = false;
 }
 
@@ -472,14 +460,7 @@ void dummy_controller::stop_dummy() {
         RCLCPP_ERROR(this->get_logger(), "Serial port is not open");
         return;
     }
-    std::string id = send_serial_command("!STOP");
-    auto start_time = std::chrono::steady_clock::now();
-    // 等待串口返回
-    if (waitting_for_manipulate(id, start_time)){
-        RCLCPP_INFO(this->get_logger(), "Dummy Stopped Success.");
-    } else {
-        RCLCPP_WARN(this->get_logger(), "Dummy Stopped Timeout");
-    }
+    send_highlevel_serial_command("!STOP");
     pause_lpos = false;
 }
 
@@ -489,14 +470,7 @@ void dummy_controller::turn_off_dummy() {
         RCLCPP_ERROR(this->get_logger(), "Serial port is not open");
         return;
     }
-    std::string id = send_serial_command("!DISABLE");
-    auto start_time = std::chrono::steady_clock::now();
-    // 等待串口返回
-    if (waitting_for_manipulate(id, start_time)){
-        RCLCPP_INFO(this->get_logger(), "Dummy Disabled Success.");
-    } else {
-        RCLCPP_WARN(this->get_logger(), "Dummy Disable Timeout");
-    }
+    send_highlevel_serial_command("!DISABLE");
 }
 
 void dummy_controller::close_serial() {
@@ -507,57 +481,33 @@ void dummy_controller::close_serial() {
     RCLCPP_INFO(this->get_logger(), "Serial port closed");
 }
 
-std::string dummy_controller::generate_id()
-{
-    // 取得當前時間戳（毫秒）
-    auto now = std::chrono::system_clock::now();
-    auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    now.time_since_epoch()).count();
-
-    std::ostringstream oss;
-    oss << "ID=" << millis;
-    return oss.str();
-}
-
-bool dummy_controller::waitting_for_manipulate(const std::string &expected_id,
-                                               const std::chrono::steady_clock::time_point &start_time) {
-    // 等待手臂执行特殊指令到位
-    std::string response;
-    while (true) {
-        auto it = pending_commands_.find(expected_id);
-
-        if (it != pending_commands_.end()) {
-            response = it->second;
-            // 安全检查：是否为状态类（以 ok 结尾）
-            if (response.size() > 5 && response.rfind("ok ") == response.size() - 3) {
-                RCLCPP_INFO(this->get_logger(), "Confirmed expected status OK: %s", response.c_str());
-                pending_commands_.erase(it);
-                return true;  // 成功匹配，退出循环
-            }
-            // 不符合状态类 OK 格式，暂不处理（可能是误匹配的回传）
-        }
-
-        // 超时处理
-        auto now = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count();
-        if (elapsed > serial_timeout_sec) {
-            RCLCPP_WARN(this->get_logger(), "Timeout waiting for OK with %s", expected_id.c_str());
-            return false;  // 超时退出循环
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));  // 防止忙等
+void dummy_controller::send_highlevel_serial_command(const std::string &cmd) {
+    try {
+        //读取并发布关节角度
+        // std::string id = generate_id();
+        std::ostringstream oss;
+        oss << cmd << "\n";
+        std::string cmd_str = oss.str();
+        // RCLCPP_INFO(this->get_logger(), "Send heighlevel command: %s", cmd_str.c_str());
+        serial_driver_->port()->send(std::vector<uint8_t>(cmd_str.begin(), cmd_str.end()));
+        // serial_driver_->port()->send(std::vector<uint8_t>(cmd_str.begin(), cmd_str.end()));
+        RCLCPP_INFO(this->get_logger(), "Send command: %s", cmd_str.c_str());
+    } catch (const std::exception &e) {
+        RCLCPP_ERROR(this->get_logger(), "Serial write error: %s", e.what());
     }
 }
 
-std::string dummy_controller::send_serial_command(const std::string &cmd) {
+void dummy_controller::send_serial_command(const std::string &cmd) {
     try {
         //读取并发布关节角度
-        std::string id = generate_id();
+        // std::string id = generate_id();
         std::ostringstream oss;
-        oss << cmd << ' ' << id << "\n";
+        oss << cmd << "\n";
         std::string cmd_str = oss.str();
-        serial_driver_->port()->async_send(std::vector<uint8_t>(cmd_str.begin(), cmd_str.end()));
+        // serial_driver_->port()->async_send(std::vector<uint8_t>(cmd_str.begin(), cmd_str.end()));
+        serial_driver_->port()->send(std::vector<uint8_t>(cmd_str.begin(), cmd_str.end()));
         RCLCPP_INFO(this->get_logger(), "Send command: %s", cmd_str.c_str());
-        return id;
+        // serial_driver_->port()->send(std::vector<uint8_t>(cmd_str.begin(), cmd_str.end()));
     } catch (const std::exception &e) {
         RCLCPP_ERROR(this->get_logger(), "Serial write error: %s", e.what());
     }
