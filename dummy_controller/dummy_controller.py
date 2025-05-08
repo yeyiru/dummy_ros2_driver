@@ -24,7 +24,7 @@ import dummy_cli_tool.ref_tool
 
 class dummy_controller(LifecycleNode):
     def __init__(self):
-        super().__init__('dummy_controller_node')
+        super().__init__('dummy_controller')
         self.dummy_driver = None
         
         # 7字位置

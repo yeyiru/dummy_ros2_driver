@@ -35,7 +35,6 @@ dummy_ros2_driver/
 ---
 - ROS2 Humble 或更新版本
 - Python 3.8 及以上版本
-- ROS2 serial_driver (可以通过 `sudo apt-get install ros-humble-serial-driver` 安装)
 - 硬件：具备串口接口的 Dummy 机械臂
 
 ## Usage | 使用方法
@@ -57,11 +56,7 @@ ros2 launch dummy dummy_usbcamera.launch.py
 ```
 source install/setup.bash
 # 單獨控制dummy手臂
-ros2 run dummy dummy_controller --ros-args --params-file ./src/dummy/config/config.yaml 
-# or
-ros2 launch dummy dummy_controller.launch.py
-# 如果需要啟動USB相機節點
-ros2 launch dummy dummy_usbcamera.launch.py
+ros2 run dummy dummy_controller
 ```
 5. 发布消息控制机械臂动作。
 

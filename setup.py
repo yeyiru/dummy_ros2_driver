@@ -3,13 +3,13 @@ from glob import glob
 
 from setuptools import find_packages, setup
 
-package_name = 'dummy_highfrequency_controller'
+package_name = 'dummy_controller'
 
 setup(
     name=package_name,
     version='0.0.0',
     packages=find_packages(
-         include=['dummy_highfrequency_controller', 'dummy_highfrequency_controller.*', 
+         include=['dummy_controller', 'dummy_controller.*', 
                   'dummy_cli_tool', 'dummy_cli_tool.*']
     ),
     data_files=[
@@ -32,7 +32,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'dummy_arm_controller = dummy_controller.dummy_arm_controller:main',
+            'dummy_controller = dummy_controller.dummy_controller:main',
         ],
     },
 )
