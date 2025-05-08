@@ -103,7 +103,7 @@ class dummy_controller(LifecycleNode):
         # TF Broadcaster
         self.tf_broadcaster = TransformBroadcaster(self)
 
-        # Timer (25 ms)
+        # Timer (50 hz)
         self.timer = self.create_timer(0.02, self.call_poll_position)
         
     def call_poll_position(self):
