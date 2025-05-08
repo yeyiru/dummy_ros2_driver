@@ -1,6 +1,0 @@
-dummy_controller:
-  ros__parameters:
-    port: "/dev/ttyACM0"
-    baudrate: 115200
-    timeout: 1000  # ms
-    serial_timeout_sec: 15 #s
