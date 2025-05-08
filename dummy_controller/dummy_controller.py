@@ -1,24 +1,16 @@
-import time
 import rclpy
-from rclpy.node import Node
+
+from rclpy.lifecycle import LifecycleNode
+from rclpy.lifecycle import State
+from rclpy.lifecycle import TransitionCallbackReturn
+from rclpy.timer import Timer
 
 from geometry_msgs.msg import PoseStamped, TransformStamped
 from trajectory_msgs.msg import JointTrajectory
 from scipy.spatial.transform import Rotation as R
 from tf2_ros import TransformBroadcaster
 from sensor_msgs.msg import JointState
-from tf2_ros import TransformBroadcaster
-from rclpy.timer import Timer
 
-
-from rclpy.lifecycle import LifecycleNode
-from rclpy.lifecycle import State
-from rclpy.lifecycle import TransitionCallbackReturn
-
-
-from control_msgs.action import FollowJointTrajectory
-from trajectory_msgs.msg import JointTrajectoryPoint
-import time
 import numpy as np
 import dummy_cli_tool.ref_tool
 
@@ -32,13 +24,6 @@ class dummy_controller(LifecycleNode):
         self.home_joints = np.array([0.0, 0.0, 90.0, 0.0, 0.0, 0.0])
         # Reset位置，收起
         self.reset_joints = np.array([0.0, -75.0, 180.0, 0.0, 0.0, 0.0])  
-
-        # 旋转角度方向定义
-        self.rad_direct_diff = np.array([1, 1, 1, 1, -1, 1])
-        # 存储当前的关节角度
-        self.current_joints_angle = np.array([0, 0, 0, 0, 0, 0])
-        # 存储当前的末端位置
-        self.current_end_position = np.array([0, 0, 0, 0, 0, 0])
         
         self.joint_names = ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6"]
         self.get_logger().info("dummy_controller_node Lifecycle node constructor called")
@@ -258,7 +243,6 @@ class dummy_controller(LifecycleNode):
             camera_tf.transform.rotation.w = 1.0
             self.tf_broadcaster.sendTransform(camera_tf)
 
-            # Optional log
             self.get_logger().info(
                 f"Published LPOS: x={x:.3f}, y={y:.3f}, z={z:.3f}, roll={roll:.1f}, pitch={pitch:.1f}, yaw={yaw:.1f}"
             )
