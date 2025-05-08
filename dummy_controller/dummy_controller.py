@@ -104,7 +104,7 @@ class dummy_controller(LifecycleNode):
         self.tf_broadcaster = TransformBroadcaster(self)
 
         # Timer (25 ms)
-        self.timer = self.create_timer(0.025, self.call_poll_position)
+        self.timer = self.create_timer(0.02, self.call_poll_position)
         
     def call_poll_position(self):
         # 读取当前关节角度
