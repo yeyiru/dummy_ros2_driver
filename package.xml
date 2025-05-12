@@ -7,16 +7,22 @@
   <maintainer email="yeyiru1997@gmail.com">root</maintainer>
   <license>TODO: License declaration</license>
 
+  <buildtool_depend>ament_python</buildtool_depend>
+  <build_depend>ament_cmake</build_depend>
+
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
   <depend>geometry_msgs</depend>
-
-  <test_depend>ament_copyright</test_depend>
-  <test_depend>ament_flake8</test_depend>
-  <test_depend>ament_pep257</test_depend>
-  <test_depend>python3-pytest</test_depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
+  <depend>tf2</depend>
+  <depend>OpenCV</depend>
+  <depend>cv_bridge</depend>
+  <depend>image_transport</depend>
 
   <export>
     <build_type>ament_python</build_type>
+    <build_type>ament_cmake</build_type>
   </export>
+
 </package>
