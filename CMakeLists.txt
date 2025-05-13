@@ -7,7 +7,9 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclpy REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
@@ -37,6 +39,9 @@ ament_target_dependencies(usb_cam_publisher
   OpenCV
   cv_bridge
 )
+
+# 安装 Python 模块
+ament_python_install_package(${PROJECT_NAME})
 
 install(DIRECTORY config
   DESTINATION share/${PROJECT_NAME}/

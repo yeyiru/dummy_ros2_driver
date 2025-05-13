@@ -1,5 +1,5 @@
+#!/usr/bin/env python3
 import rclpy
-
 from rclpy.lifecycle import LifecycleNode
 from rclpy.lifecycle import State
 from rclpy.lifecycle import TransitionCallbackReturn
