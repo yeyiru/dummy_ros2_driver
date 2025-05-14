@@ -21,7 +21,8 @@ setup(
             glob('launch/*')),
 
         (os.path.join('share', package_name, 'config'),
-            glob('config/*')),        
+            glob('config/*')),
+              
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -33,6 +34,7 @@ setup(
     entry_points={
         'console_scripts': [
             'dummy_controller = dummy_controller.dummy_controller:main',
+            'fingerprint_camera = dummy_controller.fingerprint_camera:main',
         ],
     },
 )
