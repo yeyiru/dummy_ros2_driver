@@ -53,8 +53,8 @@ class DummyUSBCameraPublisher(Node):
 
     def build_camera_info(self):
         info = CameraInfo()
-        width = self.get_parameter('image_width').value
-        height = self.get_parameter('image_height').value
+        self.width = self.get_parameter('image_width').value
+        self.height = self.get_parameter('image_height').value
         fx = self.get_parameter('camera_intrinsics.fx').value
         fy = self.get_parameter('camera_intrinsics.fy').value
         cx = self.get_parameter('camera_intrinsics.cx').value
@@ -65,8 +65,8 @@ class DummyUSBCameraPublisher(Node):
         d4 = self.get_parameter('distortion.d4').value
         d5 = self.get_parameter('distortion.d5').value
 
-        info.width = width
-        info.height = height
+        info.width = self.width
+        info.height = self.height
         info.distortion_model = 'plumb_bob'
         info.d = [d1, d2, d3, d4, d5]
         info.k = [fx, 0.0, cx, 0.0, fy, cy, 0.0, 0.0, 1.0]
@@ -88,6 +88,15 @@ class DummyUSBCameraPublisher(Node):
             self.get_parameter('image_width').value,
             self.get_parameter('image_height').value
         ))
+        center_x = self.width // 2
+        center_y = self.height // 2
+
+        # 画水平线
+        cv2.line(frame, (center_x - 100, center_y), (center_x + 100, center_y), (0, 255, 0), 2)
+
+        # 画垂直线
+        cv2.line(frame, (center_x, center_y - 100), (center_x, center_y + 100), (0, 255, 0), 2)
+        
         msg = self.bridge.cv2_to_imgmsg(frame, encoding='bgr8')
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = self.get_parameter('camera_frame_id').value
