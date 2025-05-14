@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
 import rclpy
+
 from rclpy.lifecycle import LifecycleNode
 from rclpy.lifecycle import State
 from rclpy.lifecycle import TransitionCallbackReturn
@@ -103,7 +103,7 @@ class dummy_controller(LifecycleNode):
         # TF Broadcaster
         self.tf_broadcaster = TransformBroadcaster(self)
 
-        # Timer (50 hz)
+        # Timer (25 ms)
         self.timer = self.create_timer(0.02, self.call_poll_position)
         
     def call_poll_position(self):
