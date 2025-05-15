@@ -33,7 +33,7 @@ class DummyUSBCameraPublisher(Node):
         self.bridge = CvBridge()
 
         # 打开相机
-        self.cap = cv2.VideoCapture(0)
+        self.cap = cv2.VideoCapture(6)
         if not self.cap.isOpened():
             self.get_logger().error("Cannot open USB camera")
             exit(1)

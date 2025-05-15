@@ -1,4 +1,6 @@
+import time
 import rclpy
+import asyncio
 
 from rclpy.lifecycle import LifecycleNode
 from rclpy.lifecycle import State
@@ -23,31 +25,40 @@ class dummy_controller(LifecycleNode):
         # self.ready_joints = np.array([0.0, 0.0, 90.0, 0.0, 0.0, 0.0])
         self.home_joints = np.array([0.0, 0.0, 90.0, 0.0, 0.0, 0.0])
         # Reset位置，收起
-        self.reset_joints = np.array([0.0, -75.0, 180.0, 0.0, 0.0, 0.0])  
+        self.reset_joints = np.array([0.0, -75.0, 180.0, 0.0, 0.0, 0.0])
+        self.current_joints = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        self.current_end_pose = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         
         self.joint_names = ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6"]
+
         self.get_logger().info("dummy_controller_node Lifecycle node constructor called")
     
     # ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓ Lifecycle node callback ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
     def on_configure(self, state: State) -> TransitionCallbackReturn:
         self.init_dummy()
-        # 设为7字位置
         self.home_dummy()
-
+        # t1 = time.time()
+        
+        # while True:
+        #     if time.time() - t1 > 10:
+        #         break
+        
+        # self.reset_dummy()
         #0 RGB跑马灯  1白光快闪  2白光慢闪  3红光常亮   4绿光常亮   5蓝光常亮
         self.dummy_driver.robot.set_rgb_mode(1)
         self.get_logger().info("on_configure() called")
         return TransitionCallbackReturn.SUCCESS
 
     def on_activate(self, state: State) -> TransitionCallbackReturn:
+        # self.home_dummy()
         self.init_pub_sub()
-        #0 RGB跑马灯  1白光快闪  2白光慢闪  3红光常亮   4绿光常亮   5蓝光常亮
+        #0 RGB跑马灯  1白光快闪  2白光慢闪  3红光常亮  4绿光常亮  5蓝光常亮
         self.dummy_driver.robot.set_rgb_mode(4)
         self.get_logger().info("on_activate() called")
         return TransitionCallbackReturn.SUCCESS
 
     def on_deactivate(self, state: State) -> TransitionCallbackReturn:
-        self.stop_dummy()
+        # self.stop_dummy()
         # 设为7字位置
         self.home_dummy()
 
@@ -58,27 +69,40 @@ class dummy_controller(LifecycleNode):
         return TransitionCallbackReturn.SUCCESS
 
     def on_cleanup(self, state: State) -> TransitionCallbackReturn:
-        self.stop_dummy()
+        # self.stop_dummy()
         self.reset_dummy()
-
-        self.off_dummy()
         #0 RGB跑马灯  1白光快闪  2白光慢闪  3红光常亮   4绿光常亮   5蓝光常亮
         self.dummy_driver.robot.set_rgb_mode(2)
         self.get_logger().info("on_cleanup() called")
         return TransitionCallbackReturn.SUCCESS
 
     def on_shutdown(self, state: State) -> TransitionCallbackReturn:
+        self.off_dummy()
         #0 RGB跑马灯  1白光快闪  2白光慢闪  3红光常亮   4绿光常亮   5蓝光常亮
         self.dummy_driver.robot.set_rgb_mode(0)
         self.get_logger().info("on_shutdown() called")
         return TransitionCallbackReturn.SUCCESS
     # ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑ Lifecycle node callback ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑
-    
+
+    def on_sigint_shutdown(self):
+        self.get_logger().info("Ctrl+C received. Executing custom shutdown.")
+        self.reset_dummy()
+        t1 = time.time()
+        while True:
+            if time.time() - t1 > 5:
+                break
+        self.dummy_driver.robot.set_rgb_mode(0)
+        self.reset_pub_sub()
+        self.off_dummy()
+        
     def init_dummy(self):
-        self.dummy_driver = dummy_cli_tool.ref_tool.find_any()
+        if self.dummy_driver is not None:
+            self.get_logger().warn("Dummy driver already initialized")
+        else:
+            self.dummy_driver = dummy_cli_tool.ref_tool.find_any()
         # 电机设为上电
         self.dummy_driver.robot.set_enable(True)
-
+        
     def init_pub_sub(self):
         # Subscribers
         self.pose_sub = self.create_subscription(
@@ -103,20 +127,21 @@ class dummy_controller(LifecycleNode):
         # TF Broadcaster
         self.tf_broadcaster = TransformBroadcaster(self)
 
-        # Timer (25 ms)
-        self.timer = self.create_timer(0.02, self.call_poll_position)
+         # Timer (25 ms)
+        self.poll_timer = self.create_timer(0.02, self.call_poll_position)
         
     def call_poll_position(self):
         # 读取当前关节角度
         self.current_joints = self.current_joints_callback()
-        # 发布当前关节角度
-        self.handle_current_joints(self.current_joints)
-        
         # 读取当前末端位置
-        current_end_pose = self.current_end_callback()
+        self.current_end_pose = self.current_end_callback()
+        self.pub_current_joints_and_end_pose()
+        
+    def pub_current_joints_and_end_pose(self):
+        # 发布当前关节角度
+        self.pub_current_joints()
         # 发布当前末端位置
-        self.handle_current_end_pose(current_end_pose)
-
+        self.pub_current_end_pose()
 
     def current_joints_callback(self):
         # 獲取與發佈当前关节角度
@@ -137,32 +162,32 @@ class dummy_controller(LifecycleNode):
         yaw = self.dummy_driver.get_current_pose6D(5)
         return np.array([x, y, z, roll, pitch, yaw])
 
-    def handle_current_joints(self, current_joints):
+    def pub_current_joints(self):
         try:
             joint_state = JointState()
             joint_state.header.stamp = self.get_clock().now().to_msg()
             joint_state.name = self.joint_names
-            joint_state.position = current_joints.tolist()
+            joint_state.position = self.current_joints.tolist()
 
             self.joint_pub.publish(joint_state)
 
             self.get_logger().info(
-                f'Publish JPOS: j1: {current_joints[0]:.2f}, j2: {current_joints[1]:.2f}, '
-                f'j3: {current_joints[2]:.2f}, j4: {current_joints[3]:.2f}, '
-                f'j5: {current_joints[4]:.2f}, j6: {current_joints[5]:.2f}'
+                f'Publish JPOS: j1: {self.current_joints[0]:.2f}, j2: {self.current_joints[1]:.2f}, '
+                f'j3: {self.current_joints[2]:.2f}, j4: {self.current_joints[3]:.2f}, '
+                f'j5: {self.current_joints[4]:.2f}, j6: {self.current_joints[5]:.2f}'
             )
         except Exception as e:
             self.get_logger().error(f'Parse joint error: {str(e)}')
     
-    def handle_current_end_pose(self, current_end_pose):
+    def pub_current_end_pose(self):
         try:
             # 提取並換算位置與姿態（mm → m）
-            x = current_end_pose[0] / 1000.0
-            y = current_end_pose[1] / 1000.0
-            z = current_end_pose[2] / 1000.0
-            roll = current_end_pose[3]
-            pitch = current_end_pose[4]
-            yaw = current_end_pose[5]
+            x = self.current_end_pose[0] / 1000.0
+            y = self.current_end_pose[1] / 1000.0
+            z = self.current_end_pose[2] / 1000.0
+            roll = self.current_end_pose[3]
+            pitch = self.current_end_pose[4]
+            yaw = self.current_end_pose[5]
 
             # 轉為弧度
             rolld = np.radians(roll)
@@ -243,6 +268,22 @@ class dummy_controller(LifecycleNode):
             camera_tf.transform.rotation.w = 1.0
             self.tf_broadcaster.sendTransform(camera_tf)
 
+            # ISAAC TF
+            r = R.from_euler('z', 90, degrees=True)
+            isaac_quat = r.as_quat()
+            isaac_tf = TransformStamped()
+            isaac_tf.header.stamp = stamp
+            isaac_tf.header.frame_id = "base_link"
+            isaac_tf.child_frame_id = "isaac_frame"
+            isaac_tf.transform.translation.x = 0.0
+            isaac_tf.transform.translation.y = 0.0
+            isaac_tf.transform.translation.z = 0.0
+            isaac_tf.transform.rotation.x = isaac_quat[0]
+            isaac_tf.transform.rotation.y = isaac_quat[1]
+            isaac_tf.transform.rotation.z = isaac_quat[2]
+            isaac_tf.transform.rotation.w = isaac_quat[3]
+            self.tf_broadcaster.sendTransform(isaac_tf)
+
             self.get_logger().info(
                 f"Published LPOS: x={x:.3f}, y={y:.3f}, z={z:.3f}, roll={roll:.1f}, pitch={pitch:.1f}, yaw={yaw:.1f}"
             )
@@ -272,24 +313,45 @@ class dummy_controller(LifecycleNode):
             self.tf_broadcaster = None
             self.get_logger().info("Destroyed tf_broadcaster")
         
-        if hasattr(self, 'timer') and self.timer is not None:
-            self.destroy_timer(self.timer)
-            self.get_logger().info("Destroyed timer")
+        if hasattr(self, 'poll_timer') and self.poll_timer is not None:
+            self.destroy_timer(self.poll_timer)
+            self.get_logger().info("Destroyed poll_timer")
     
-    def home_dummy(self):
+    def home_dummy(self, wait=True):
         self.dummy_driver.robot.move_j(
             self.home_joints[0], self.home_joints[1], self.home_joints[2],
             self.home_joints[3], self.home_joints[4], self.home_joints[5])
+        # if wait:
+        #     # 等待到位
+        #     # self.check_joints_place(self.home_joints)
+        #     asyncio.ensure_future(self.check_joints_place(self.home_joints))
 
     def stop_dummy(self):
         self.dummy_driver.robot.move_j(
             self.current_joints[0], self.current_joints[1], self.current_joints[2],
             self.current_joints[3], self.current_joints[4], self.current_joints[5])
+        self.get_logger.info("Dummy Emergency Stop")
 
-    def reset_dummy(self):
+    def reset_dummy(self, wait=True):
         self.dummy_driver.robot.move_j(
             self.reset_joints[0], self.reset_joints[1], self.reset_joints[2],
             self.reset_joints[3], self.reset_joints[4], self.reset_joints[5])
+        # if wait:
+        #     # 等待到位
+        #     asyncio.ensure_future(self.check_joints_place(self.reset_joints))
+            # self.check_joints_place(self.reset_joints)
+        # self.get_logger().info("Dummy reset the position")
+
+    async def check_joints_place(self, target_joints):
+        # 檢查關節位置是否到位
+        t1 = time.time()
+        while True:
+            if np.allclose(self.current_joints, target_joints, atol=0.5):
+                break
+            if time.time() - t1 > 10:
+                self.get_logger().warn("Timeout waiting for joints to reach target")
+                break
+            await asyncio.sleep(0.05)  # 非阻塞等待
 
     def end_pos_callback(self, msg: PoseStamped):
         # 1. 提取位置
@@ -335,7 +397,7 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        # node.cleanup()
+        node.on_sigint_shutdown()        
         rclpy.shutdown()
 
 if __name__ == '__main__':
